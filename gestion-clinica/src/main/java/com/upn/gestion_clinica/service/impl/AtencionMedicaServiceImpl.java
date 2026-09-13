@@ -3,6 +3,8 @@ package com.upn.gestion_clinica.service.impl;
 import com.upn.gestion_clinica.dto.Cie10ResponseDto;
 import com.upn.gestion_clinica.dto.atencion.AtencionMedicaRegistroDto;
 import com.upn.gestion_clinica.dto.atencion.AtencionMedicaResponseDto;
+import com.upn.gestion_clinica.dto.atencion.HistorialClinicoResponseDto;
+import com.upn.gestion_clinica.dto.paciente.PacienteResponseDto;
 import com.upn.gestion_clinica.dto.receta.DetalleRecetaDto;
 import com.upn.gestion_clinica.dto.receta.RecetaMedicaDto;
 import com.upn.gestion_clinica.entity.*;
@@ -149,6 +151,37 @@ public class AtencionMedicaServiceImpl implements AtencionMedicaService {
         }
 
         return mapearADto(atencion);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HistorialClinicoResponseDto obtenerHistorialPorCita(Integer citaMedicaId, String correoMedicoLogueado) {
+        Medico medico = obtenerMedicoPorCorreo(correoMedicoLogueado);
+        CitaMedica cita = citaMedicaRepository.findById(citaMedicaId)
+                .orElseThrow(() -> new EntityNotFoundException("Cita médica no encontrada"));
+
+        if (!cita.getMedico().getId().equals(medico.getId())) {
+            throw new IllegalArgumentException("No tienes permiso para consultar el historial de esta cita");
+        }
+
+        List<AtencionMedica> atenciones = atencionMedicaRepository
+                .findByCitaMedicaMedicoIdAndCitaMedicaPacienteIdOrderByFechaAtencionDesc(medico.getId(), cita.getPaciente().getId());
+        return new HistorialClinicoResponseDto(
+                mapearPacienteDto(cita.getPaciente()),
+                atenciones.stream().map(this::mapearADto).toList());
+    }
+
+    private PacienteResponseDto mapearPacienteDto(Paciente paciente) {
+        PacienteResponseDto dto = new PacienteResponseDto();
+        dto.setId(paciente.getId());
+        dto.setDocumentoIdentidad(paciente.getDocumentoIdentidad());
+        dto.setNombre(paciente.getNombre());
+        dto.setApellido(paciente.getApellido());
+        dto.setFechaNacimiento(paciente.getFechaNacimiento());
+        dto.setTelefono(paciente.getTelefono());
+        dto.setCorreo(paciente.getCorreo());
+        dto.setEstado(paciente.getEstado());
+        return dto;
     }
 
     private AtencionMedicaResponseDto mapearADto(AtencionMedica atencion) {

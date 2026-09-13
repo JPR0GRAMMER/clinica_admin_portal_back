@@ -14,4 +14,7 @@ public interface AtencionMedicaRepository extends JpaRepository<AtencionMedica, 
 
 
     List<AtencionMedica> findByCitaMedicaMedicoIdOrderByFechaAtencionDesc(Integer medicoId);
+
+    List<AtencionMedica> findByCitaMedicaMedicoIdAndCitaMedicaPacienteIdOrderByFechaAtencionDesc(
+            Integer medicoId, Integer pacienteId);
 }
