@@ -1,5 +1,6 @@
 package com.upn.gestion_clinica.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -23,6 +24,9 @@ public class Rol {
     private String nombre;
 
     private String descripcion;
+
+    @Column(nullable = false, columnDefinition = "SMALLINT DEFAULT 1")
+    private Integer estado = 1;
 
     @ManyToMany(fetch = jakarta.persistence.FetchType.EAGER)
     @jakarta.persistence.JoinTable(

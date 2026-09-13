@@ -93,7 +93,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     @Transactional(readOnly = true)
     public List<UsuarioResponseDto> listarUsuarios() {
-        return usuarioRepository.findAll().stream()
+        return usuarioRepository.findAllConRolActivo().stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
     }

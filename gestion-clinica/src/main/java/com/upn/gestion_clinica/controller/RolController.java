@@ -20,6 +20,6 @@ public class RolController {
 
     @GetMapping
     public List<Rol> listarRoles() {
-        return rolRepository.findAll();
+        return rolRepository.findByEstado(1);
     }
 }
