@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot-GestionClinicaApplication<gestion-clinica>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.upn.gestion_clinica.GestionClinicaApplication",
+      "projectName": "gestion-clinica",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}

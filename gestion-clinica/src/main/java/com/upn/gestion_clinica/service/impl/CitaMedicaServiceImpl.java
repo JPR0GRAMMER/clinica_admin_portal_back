@@ -6,7 +6,9 @@ import com.upn.gestion_clinica.entity.CitaMedica;
 import com.upn.gestion_clinica.entity.EstadoCitaEnum;
 import com.upn.gestion_clinica.entity.Medico;
 import com.upn.gestion_clinica.entity.Paciente;
+import com.upn.gestion_clinica.entity.HorarioMedico;
 import com.upn.gestion_clinica.repository.CitaMedicaRepository;
+import com.upn.gestion_clinica.repository.HorarioMedicoRepository;
 import com.upn.gestion_clinica.repository.MedicoRepository;
 import com.upn.gestion_clinica.repository.PacienteRepository;
 import com.upn.gestion_clinica.service.CitaMedicaService;
@@ -23,13 +25,16 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
     private final CitaMedicaRepository citaMedicaRepository;
     private final PacienteRepository pacienteRepository;
     private final MedicoRepository medicoRepository;
+    private final HorarioMedicoRepository horarioMedicoRepository;
 
     public CitaMedicaServiceImpl(CitaMedicaRepository citaMedicaRepository, 
                                  PacienteRepository pacienteRepository, 
-                                 MedicoRepository medicoRepository) {
+                                 MedicoRepository medicoRepository,
+                                 HorarioMedicoRepository horarioMedicoRepository) {
         this.citaMedicaRepository = citaMedicaRepository;
         this.pacienteRepository = pacienteRepository;
         this.medicoRepository = medicoRepository;
+        this.horarioMedicoRepository = horarioMedicoRepository;
     }
 
     @Override
@@ -43,6 +48,7 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
         Medico medico = medicoRepository.findById(requestDto.getMedicoId())
                 .orElseThrow(() -> new EntityNotFoundException("Médico no encontrado"));
 
+        validarDisponibilidadMedico(requestDto);
 
         if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(
                 requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita())) {
@@ -105,6 +111,8 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
     public CitaMedicaResponseDto reprogramarCita(Integer id, CitaMedicaRequestDto requestDto) {
         CitaMedica cita = citaMedicaRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Cita médica no encontrada"));
+
+        validarDisponibilidadMedico(requestDto);
 
 
         boolean cambioHorario = !cita.getFechaCita().equals(requestDto.getFechaCita()) || 
@@ -175,5 +183,19 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
         dto.setHoraCita(cita.getHoraCita());
         dto.setEstadoCita(cita.getEstadoCita().name().replace("_", " "));
         return dto;
+    }
+
+    private void validarDisponibilidadMedico(CitaMedicaRequestDto requestDto) {
+        int diaCita = requestDto.getFechaCita().getDayOfWeek().getValue();
+        boolean dentroDeHorario = horarioMedicoRepository
+                .findByMedicoIdAndDiaSemana(requestDto.getMedicoId(), diaCita)
+                .stream()
+                .anyMatch(horario -> !requestDto.getHoraCita().isBefore(horario.getHoraInicio())
+                        && requestDto.getHoraCita().isBefore(horario.getHoraFin()));
+
+        if (!dentroDeHorario) {
+            throw new IllegalArgumentException(
+                    "La cita debe programarse dentro de un horario disponible del médico seleccionado.");
+        }
     }
 }

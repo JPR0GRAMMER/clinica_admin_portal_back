@@ -52,7 +52,7 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.GET, "/api/citas/**").hasAnyRole("RECEPCIONISTA", "MEDICO")
                 .requestMatchers("/api/citas/**").hasRole("RECEPCIONISTA")
-                .requestMatchers("/api/horarios-medicos/**").hasRole("RECEPCIONISTA")
+                .requestMatchers("/api/horarios-medicos/**").hasRole("ADMINISTRADOR")
                 
 
                 .requestMatchers("/api/atenciones/**").hasRole("MEDICO")

@@ -17,4 +17,6 @@ public interface CitaMedicaRepository extends JpaRepository<CitaMedica, Integer>
     List<CitaMedica> findAllByOrderByFechaCitaDescHoraCitaDesc();
     
     List<CitaMedica> findAllByMedicoIdOrderByFechaCitaDescHoraCitaDesc(Integer medicoId);
+
+    List<CitaMedica> findByMedicoIdAndFechaCitaGreaterThanEqual(Integer medicoId, LocalDate fechaCita);
 }
