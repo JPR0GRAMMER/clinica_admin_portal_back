@@ -224,4 +224,204 @@ class CitaMedicaServiceImplTest {
 
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.listarCitas() - filtra por médico autenticado")
+    void listarCitas_FiltraPorMedico() {
+        when(medicoRepository.findByUsuarioCorreo("medico@clinica.com")).thenReturn(Optional.of(medico));
+        CitaMedica cita = cita(200, fechaValida, LocalTime.of(11, 0), EstadoCitaEnum.Confirmada);
+        when(citaMedicaRepository.findAllByMedicoIdOrderByFechaCitaDescHoraCitaDesc(10))
+                .thenReturn(List.of(cita));
+
+        List<CitaMedicaResponseDto> response = citaMedicaService.listarCitas("medico@clinica.com", true);
+
+        assertEquals(1, response.size());
+        assertEquals(200, response.get(0).getId());
+        verify(citaMedicaRepository).findAllByMedicoIdOrderByFechaCitaDescHoraCitaDesc(10);
+        verify(citaMedicaRepository, never()).findAllByOrderByFechaCitaDescHoraCitaDesc();
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.listarCitas() - lista todas para recepción en orden descendente")
+    void listarCitas_ListaTodasParaRecepcion() {
+        CitaMedica masReciente = cita(202, fechaValida.plusDays(1), LocalTime.of(11, 0), EstadoCitaEnum.Confirmada);
+        CitaMedica anterior = cita(201, fechaValida, LocalTime.of(9, 0), EstadoCitaEnum.Confirmada);
+        when(citaMedicaRepository.findAllByOrderByFechaCitaDescHoraCitaDesc())
+                .thenReturn(List.of(masReciente, anterior));
+
+        List<CitaMedicaResponseDto> response = citaMedicaService.listarCitas("recepcion@clinica.com", false);
+
+        assertEquals(List.of(202, 201), response.stream().map(CitaMedicaResponseDto::getId).toList());
+        verify(citaMedicaRepository).findAllByOrderByFechaCitaDescHoraCitaDesc();
+        verifyNoInteractions(medicoRepository);
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.listarCitas() - médico asociado inexistente")
+    void listarCitas_RechazaMedicoInexistente() {
+        when(medicoRepository.findByUsuarioCorreo("sin-medico@clinica.com")).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class,
+                () -> citaMedicaService.listarCitas("sin-medico@clinica.com", true));
+        verify(citaMedicaRepository, never()).findAllByMedicoIdOrderByFechaCitaDescHoraCitaDesc(anyInt());
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.obtenerCitaPorId() - consulta válida para recepción")
+    void obtenerCitaPorId_ConsultaValidaParaRecepcion() {
+        CitaMedica cita = cita(300, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        when(citaMedicaRepository.findById(300)).thenReturn(Optional.of(cita));
+
+        CitaMedicaResponseDto response = citaMedicaService.obtenerCitaPorId(300, "recepcion@clinica.com", false);
+
+        assertEquals(300, response.getId());
+        assertEquals("Carlos Mendoza", response.getPacienteNombreCompleto());
+        assertEquals("Dr/Dra. Roberto Sanchez", response.getMedicoNombreCompleto());
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.obtenerCitaPorId() - cita inexistente")
+    void obtenerCitaPorId_RechazaCitaInexistente() {
+        when(citaMedicaRepository.findById(999)).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class,
+                () -> citaMedicaService.obtenerCitaPorId(999, "recepcion@clinica.com", false));
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.obtenerCitaPorId() - permite al médico autorizado")
+    void obtenerCitaPorId_PermiteMedicoAutorizado() {
+        CitaMedica cita = cita(301, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        when(citaMedicaRepository.findById(301)).thenReturn(Optional.of(cita));
+        when(medicoRepository.findByUsuarioCorreo("medico@clinica.com")).thenReturn(Optional.of(medico));
+
+        CitaMedicaResponseDto response = citaMedicaService.obtenerCitaPorId(301, "medico@clinica.com", true);
+
+        assertEquals(301, response.getId());
+        verify(medicoRepository).findByUsuarioCorreo("medico@clinica.com");
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.obtenerCitaPorId() - rechaza al médico que consulta una cita ajena")
+    void obtenerCitaPorId_RechazaMedicoNoAutorizado() {
+        CitaMedica cita = cita(302, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        Medico otroMedico = new Medico();
+        otroMedico.setId(99);
+        when(citaMedicaRepository.findById(302)).thenReturn(Optional.of(cita));
+        when(medicoRepository.findByUsuarioCorreo("otro@clinica.com")).thenReturn(Optional.of(otroMedico));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> citaMedicaService.obtenerCitaPorId(302, "otro@clinica.com", true));
+
+        assertEquals("No tienes permiso para ver esta cita", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.reprogramarCita() - cambia fecha, médico y paciente")
+    void reprogramarCita_CambiaFechaMedicoYPaciente() {
+        CitaMedica cita = cita(400, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        Medico nuevoMedico = new Medico();
+        nuevoMedico.setId(11);
+        nuevoMedico.setUsuario(medico.getUsuario());
+        nuevoMedico.setEspecialidad(medico.getEspecialidad());
+        Paciente nuevoPaciente = new Paciente();
+        nuevoPaciente.setId(2);
+        nuevoPaciente.setNombre("Julia");
+        nuevoPaciente.setApellido("Ramos");
+        nuevoPaciente.setDocumentoIdentidad("71234567");
+        CitaMedicaRequestDto request = request(2, 11, fechaValida.plusDays(2), LocalTime.of(12, 0));
+
+        when(citaMedicaRepository.findById(400)).thenReturn(Optional.of(cita));
+        when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(11), anyInt())).thenReturn(List.of(horario));
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(11, request.getFechaCita(), request.getHoraCita()))
+                .thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(2, request.getFechaCita(), request.getHoraCita()))
+                .thenReturn(false);
+        when(medicoRepository.findById(11)).thenReturn(Optional.of(nuevoMedico));
+        when(pacienteRepository.findById(2)).thenReturn(Optional.of(nuevoPaciente));
+        when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CitaMedicaResponseDto response = citaMedicaService.reprogramarCita(400, request);
+
+        assertEquals(11, response.getMedicoId());
+        assertEquals(2, response.getPacienteId());
+        assertEquals(fechaValida.plusDays(2), response.getFechaCita());
+        assertEquals("Reprogramada", response.getEstadoCita());
+        verify(citaMedicaRepository).save(cita);
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.reprogramarCita() - rechaza conflicto de disponibilidad")
+    void reprogramarCita_RechazaConflictoDeDisponibilidad() {
+        CitaMedica cita = cita(401, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida.plusDays(1), horaValida);
+        when(citaMedicaRepository.findById(401)).thenReturn(Optional.of(cita));
+        when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt())).thenReturn(List.of(horario));
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, request.getFechaCita(), request.getHoraCita()))
+                .thenReturn(true);
+
+        assertThrows(IllegalArgumentException.class, () -> citaMedicaService.reprogramarCita(401, request));
+        verify(citaMedicaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.reprogramarCita() - preserva estados Asistió y Cancelada")
+    void reprogramarCita_PreservaEstadosFinales() {
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
+        when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt())).thenReturn(List.of(horario));
+        when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        for (EstadoCitaEnum estado : List.of(EstadoCitaEnum.Asistió, EstadoCitaEnum.Cancelada)) {
+            CitaMedica cita = cita(410, fechaValida, horaValida, estado);
+            when(citaMedicaRepository.findById(410)).thenReturn(Optional.of(cita));
+
+            CitaMedicaResponseDto response = citaMedicaService.reprogramarCita(410, request);
+
+            assertEquals(estado.name().replace("_", " "), response.getEstadoCita());
+        }
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.cambiarEstadoCita() - guarda cada estado del enum")
+    void cambiarEstadoCita_GuardaCadaEstado() {
+        CitaMedica cita = cita(500, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
+        when(citaMedicaRepository.findById(500)).thenReturn(Optional.of(cita));
+
+        for (EstadoCitaEnum estado : EstadoCitaEnum.values()) {
+            citaMedicaService.cambiarEstadoCita(500, estado);
+            assertEquals(estado, cita.getEstadoCita());
+        }
+
+        verify(citaMedicaRepository, times(EstadoCitaEnum.values().length)).save(cita);
+    }
+
+    @Test
+    @DisplayName("CitaMedicaServiceImpl.cambiarEstadoCita() - cita inexistente")
+    void cambiarEstadoCita_RechazaCitaInexistente() {
+        when(citaMedicaRepository.findById(999)).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class,
+                () -> citaMedicaService.cambiarEstadoCita(999, EstadoCitaEnum.Cancelada));
+        verify(citaMedicaRepository, never()).save(any());
+    }
+
+    private CitaMedicaRequestDto request(Integer pacienteId, Integer medicoId, LocalDate fecha, LocalTime hora) {
+        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
+        request.setPacienteId(pacienteId);
+        request.setMedicoId(medicoId);
+        request.setFechaCita(fecha);
+        request.setHoraCita(hora);
+        return request;
+    }
+
+    private CitaMedica cita(Integer id, LocalDate fecha, LocalTime hora, EstadoCitaEnum estado) {
+        CitaMedica cita = new CitaMedica();
+        cita.setId(id);
+        cita.setPaciente(paciente);
+        cita.setMedico(medico);
+        cita.setFechaCita(fecha);
+        cita.setHoraCita(hora);
+        cita.setEstadoCita(estado);
+        return cita;
+    }
 }
