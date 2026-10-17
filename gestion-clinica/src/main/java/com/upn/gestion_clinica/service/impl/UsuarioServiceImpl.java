@@ -161,6 +161,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     public void cambiarEstado(Integer id, Integer estado) {
         Usuario usuario = buscarUsuarioPorId(id);
         usuario.setEstado(estado);
+        if (Integer.valueOf(1).equals(estado)) {
+            usuario.setBloqueado(false);
+            usuario.setIntentosFallidos(0);
+        }
         usuarioRepository.save(usuario);
     }
 
@@ -181,6 +185,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         usuario.setContrasena(contrasenaEncriptada);
         usuario.setRol(rol);
         usuario.setEstado(1);
+        usuario.setIntentosFallidos(0);
+        usuario.setBloqueado(false);
         return usuarioRepository.save(usuario);
     }
 

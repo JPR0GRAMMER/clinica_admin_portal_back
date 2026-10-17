@@ -30,6 +30,11 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("El usuario está inactivo.");
         }
 
+        if (Boolean.TRUE.equals(usuario.getBloqueado())) {
+            throw new org.springframework.security.authentication.LockedException(
+                    LoginAttemptService.ACCOUNT_LOCKED_MESSAGE);
+        }
+
         String roleName = "ROLE_" + usuario.getRol().getNombre().toUpperCase();
         
         return new org.springframework.security.core.userdetails.User(
