@@ -40,4 +40,10 @@ public class Usuario {
 
     @Column(nullable = false, columnDefinition = "SMALLINT DEFAULT 1")
     private Integer estado;
+
+    @Column(name = "intentos_fallidos", nullable = false)
+    private Integer intentosFallidos = 0;
+
+    @Column(nullable = false)
+    private Boolean bloqueado = false;
 }
