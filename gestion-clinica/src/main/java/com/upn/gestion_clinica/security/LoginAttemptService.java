@@ -20,6 +20,37 @@ public class LoginAttemptService {
         this.usuarioRepository = usuarioRepository;
     }
 
+    @Transactional(readOnly = true)
+    public boolean isBlocked(String correo) {
+        if (correo == null || correo.isBlank()) {
+            return false;
+        }
+        return usuarioRepository.findByCorreo(correo)
+                .map(u -> Integer.valueOf(1).equals(u.getEstado()) && Boolean.TRUE.equals(u.getBloqueado()))
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public int getRemainingAttempts(String correo) {
+        if (correo == null || correo.isBlank()) {
+            return MAX_FAILED_ATTEMPTS;
+        }
+        return usuarioRepository.findByCorreo(correo)
+                .map(u -> Math.max(0, MAX_FAILED_ATTEMPTS - Optional.ofNullable(u.getIntentosFallidos()).orElse(0)))
+                .orElse(MAX_FAILED_ATTEMPTS);
+    }
+
+    public String buildFailureMessage(String correo) {
+        int restantes = getRemainingAttempts(correo);
+        if (restantes == 1) {
+            return "Credenciales incorrectas. Te queda 1 intento antes de que tu cuenta sea bloqueada.";
+        }
+        if (restantes > 1 && restantes < MAX_FAILED_ATTEMPTS) {
+            return "Credenciales incorrectas. Te quedan " + restantes + " intentos antes de que tu cuenta sea bloqueada.";
+        }
+        return "Credenciales incorrectas. Recuerda que tras 3 intentos fallidos la cuenta será bloqueada.";
+    }
+
     @Transactional
     public boolean registerFailure(String correo) {
         Optional<Usuario> usuarioOptional = usuarioRepository.findByCorreoForUpdate(correo);
@@ -28,8 +59,12 @@ public class LoginAttemptService {
         }
 
         Usuario usuario = usuarioOptional.get();
-        if (!Integer.valueOf(1).equals(usuario.getEstado()) || Boolean.TRUE.equals(usuario.getBloqueado())) {
+        if (!Integer.valueOf(1).equals(usuario.getEstado())) {
             return false;
+        }
+
+        if (Boolean.TRUE.equals(usuario.getBloqueado())) {
+            return true;
         }
 
         int intentosFallidos = Optional.ofNullable(usuario.getIntentosFallidos()).orElse(0) + 1;

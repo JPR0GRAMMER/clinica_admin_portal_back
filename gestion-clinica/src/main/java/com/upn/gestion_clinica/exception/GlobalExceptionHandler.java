@@ -48,7 +48,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponseDto> handleAuthentication(AuthenticationException ex) {
-        return buildResponse("Credenciales incorrectas o usuario no encontrado.", HttpStatus.UNAUTHORIZED);
+        if (ex.getCause() instanceof LockedException) {
+            return buildResponse(ex.getCause().getMessage(), HttpStatus.LOCKED);
+        }
+        String mensaje = (ex.getMessage() != null && !ex.getMessage().isBlank())
+                ? ex.getMessage()
+                : "Credenciales incorrectas o usuario no encontrado.";
+        return buildResponse(mensaje, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler(LockedException.class)

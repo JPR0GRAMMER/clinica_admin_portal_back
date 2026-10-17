@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,18 +61,34 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("AuthController.login() - conserva el error mientras no se alcance el límite")
-    void login_ConservaErrorAntesDelLimite() {
+    @DisplayName("AuthController.login() - advierte intentos restantes antes de alcanzar el límite")
+    void login_AdvierteIntentosRestantesAntesDelLimite() {
         LoginRequestDto request = request();
         BadCredentialsException authenticationFailure = new BadCredentialsException("Credenciales inválidas");
         when(authenticationManager.authenticate(any())).thenThrow(authenticationFailure);
         when(loginAttemptService.registerFailure(request.getCorreo())).thenReturn(false);
+        when(loginAttemptService.buildFailureMessage(request.getCorreo()))
+                .thenReturn("Credenciales incorrectas. Te quedan 2 intentos antes de que tu cuenta sea bloqueada.");
 
         AuthenticationException exception = assertThrows(AuthenticationException.class,
                 () -> authController.login(request));
 
-        assertSame(authenticationFailure, exception);
+        assertEquals("Credenciales incorrectas. Te quedan 2 intentos antes de que tu cuenta sea bloqueada.", exception.getMessage());
         verify(loginAttemptService).registerFailure(request.getCorreo());
+        verify(loginAttemptService).buildFailureMessage(request.getCorreo());
+    }
+
+    @Test
+    @DisplayName("AuthController.login() - rechaza directamente si la cuenta ya se encuentra bloqueada")
+    void login_RechazaDirectamenteSiCuentaYaBloqueada() {
+        LoginRequestDto request = request();
+        when(loginAttemptService.isBlocked(request.getCorreo())).thenReturn(true);
+
+        LockedException exception = assertThrows(LockedException.class,
+                () -> authController.login(request));
+
+        assertEquals(LoginAttemptService.ACCOUNT_LOCKED_MESSAGE, exception.getMessage());
+        verify(authenticationManager, never()).authenticate(any());
     }
 
     private LoginRequestDto request() {

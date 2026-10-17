@@ -8,6 +8,7 @@ import com.upn.gestion_clinica.security.LoginAttemptService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
@@ -45,6 +46,10 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto request) {
+        if (loginAttemptService.isBlocked(request.getCorreo())) {
+            throw new LockedException(LoginAttemptService.ACCOUNT_LOCKED_MESSAGE);
+        }
+
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getCorreo(), request.getContrasena())
@@ -53,7 +58,7 @@ public class AuthController {
             if (loginAttemptService.registerFailure(request.getCorreo())) {
                 throw new LockedException(LoginAttemptService.ACCOUNT_LOCKED_MESSAGE);
             }
-            throw ex;
+            throw new BadCredentialsException(loginAttemptService.buildFailureMessage(request.getCorreo()));
         }
 
         final UserDetails userDetails = userDetailsService.loadUserByUsername(request.getCorreo());
