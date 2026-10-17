@@ -34,5 +34,6 @@ public class Rol {
             joinColumns = @jakarta.persistence.JoinColumn(name = "rol_id"),
             inverseJoinColumns = @jakarta.persistence.JoinColumn(name = "vista_id")
     )
+    @jakarta.persistence.OrderBy("nombre ASC")
     private Set<Vista> vistas;
 }
