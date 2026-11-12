@@ -155,10 +155,9 @@ public class HorarioMedicoServiceImpl implements HorarioMedicoService {
         LocalTime ahora = LocalTime.now();
 
         boolean existenCitasSinCobertura = citaMedicaRepository
-                .findByMedicoIdAndFechaCitaGreaterThanEqual(medicoId, hoy)
+                .findByMedicoIdAndFechaCitaGreaterThanEqualAndEstadoCitaIn(
+                        medicoId, hoy, List.of(EstadoCitaEnum.Confirmada, EstadoCitaEnum.Reprogramada))
                 .stream()
-                .filter(cita -> cita.getEstadoCita() == EstadoCitaEnum.Confirmada
-                        || cita.getEstadoCita() == EstadoCitaEnum.Reprogramada)
                 .filter(cita -> cita.getFechaCita().isAfter(hoy)
                         || !cita.getHoraCita().isBefore(ahora))
                 .anyMatch(cita -> !estaCubierta(cita, horariosVigentes, horarioExcluido, reemplazo));

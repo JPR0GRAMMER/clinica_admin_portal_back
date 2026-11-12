@@ -16,11 +16,14 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class CitaMedicaServiceImpl implements CitaMedicaService {
+    private static final int SIN_CITA_EXISTENTE = 0; // Los identificadores generados comienzan en 1.
 
     private final CitaMedicaRepository citaMedicaRepository;
     private final PacienteRepository pacienteRepository;
@@ -40,55 +43,10 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
     @Override
     @Transactional
     public CitaMedicaResponseDto agendarCita(CitaMedicaRequestDto requestDto) {
-
-        Paciente paciente = pacienteRepository.findById(requestDto.getPacienteId())
-                .orElseThrow(() -> new EntityNotFoundException("Paciente no encontrado"));
-
-
-        Medico medico = medicoRepository.findById(requestDto.getMedicoId())
-                .orElseThrow(() -> new EntityNotFoundException("Médico no encontrado"));
-
-        validarDisponibilidadMedico(requestDto);
-
-        // NUEVA VALIDACIÓN: Verificar que el paciente no tenga otra cita en la MISMA ESPECIALIDAD el mismo día
-        Integer especialidadNuevaId = medico.getEspecialidad().getId();
-        
-        boolean yaTieneCitaMismaEspecialidadEseDia = citaMedicaRepository.findAll().stream()
-                .anyMatch(c -> c.getPaciente().getId().equals(requestDto.getPacienteId()) &&
-                               c.getFechaCita().equals(requestDto.getFechaCita()) &&
-                               c.getMedico().getEspecialidad().getId().equals(especialidadNuevaId) &&
-                               c.getEstadoCita() != EstadoCitaEnum.Cancelada);
-
-        if (yaTieneCitaMismaEspecialidadEseDia) {
-            throw new IllegalArgumentException("El paciente ya cuenta con una cita programada para esta misma especialidad en la fecha seleccionada.");
-        }
-
-        // Validación alternativa con Stream: Verificar si el médico ya tiene una cita ACTIVA a esa misma hora
-        boolean medicoOcupado = citaMedicaRepository.findAll().stream()
-                .filter(c -> c.getMedico() != null && c.getFechaCita() != null && c.getHoraCita() != null)
-                .anyMatch(c -> c.getMedico().getId().equals(requestDto.getMedicoId()) &&
-                               c.getFechaCita().equals(requestDto.getFechaCita()) &&
-                               c.getHoraCita().equals(requestDto.getHoraCita()) &&
-                               c.getEstadoCita() != EstadoCitaEnum.Cancelada);
-
-        if (medicoOcupado) {
-            throw new IllegalArgumentException("El médico ya tiene una cita asignada en ese horario exacto.");
-        }
-
-        if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
-                requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
-            throw new IllegalArgumentException("El paciente ya tiene una cita asignada en ese horario exacto.");
-        }
-
         CitaMedica cita = new CitaMedica();
-        cita.setPaciente(paciente);
-        cita.setMedico(medico);
-        cita.setFechaCita(requestDto.getFechaCita());
-        cita.setHoraCita(requestDto.getHoraCita());
+        asignarCita(cita, requestDto, SIN_CITA_EXISTENTE);
         cita.setEstadoCita(EstadoCitaEnum.Confirmada);
-
-        CitaMedica guardada = citaMedicaRepository.save(cita);
-        return mapearADto(guardada);
+        return mapearADto(citaMedicaRepository.save(cita));
     }
 
     @Override
@@ -129,61 +87,68 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
     @Override
     @Transactional
     public CitaMedicaResponseDto reprogramarCita(Integer id, CitaMedicaRequestDto requestDto) {
-        CitaMedica cita = citaMedicaRepository.findById(id)
+        CitaMedica cita = citaMedicaRepository.buscarParaActualizar(id)
                 .orElseThrow(() -> new EntityNotFoundException("Cita médica no encontrada"));
 
-        validarDisponibilidadMedico(requestDto);
-
-
-        boolean cambioHorario = !cita.getFechaCita().equals(requestDto.getFechaCita()) || 
-                                !cita.getHoraCita().equals(requestDto.getHoraCita());
-        boolean cambioMedico = !cita.getMedico().getId().equals(requestDto.getMedicoId());
-
-        if (cambioHorario || cambioMedico) {
-            if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
-                    requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
-                throw new IllegalArgumentException("El médico seleccionado ya tiene una cita en ese horario.");
-            }
+        if (!cita.getEstadoCita().permiteReprogramar()) {
+            throw new IllegalArgumentException("Solo se pueden reprogramar citas confirmadas o reprogramadas.");
         }
 
-        boolean cambioPaciente = !cita.getPaciente().getId().equals(requestDto.getPacienteId());
+        asignarCita(cita, requestDto, id);
+        cita.setEstadoCita(EstadoCitaEnum.Reprogramada);
+        return mapearADto(citaMedicaRepository.save(cita));
+    }
 
-        if (cambioHorario || cambioPaciente) {
-            if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
-                    requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
-                throw new IllegalArgumentException("El paciente seleccionado ya tiene una cita en ese horario.");
-            }
-        }
+    private void asignarCita(CitaMedica cita, CitaMedicaRequestDto requestDto, int idExcluido) {
+        // Siempre se adquieren los bloqueos en el orden paciente, médico.
+        Paciente paciente = bloquearPaciente(requestDto.getPacienteId());
+        Medico medico = bloquearMedico(requestDto.getMedicoId());
+        validarDisponibilidadMedico(requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita());
+        validarConflictos(paciente, medico, requestDto.getFechaCita(), requestDto.getHoraCita(), idExcluido);
 
-        if (cambioMedico) {
-            Medico medico = medicoRepository.findById(requestDto.getMedicoId())
-                    .orElseThrow(() -> new EntityNotFoundException("Médico no encontrado"));
-            cita.setMedico(medico);
-        }
-
-
-        if (!cita.getPaciente().getId().equals(requestDto.getPacienteId())) {
-            Paciente paciente = pacienteRepository.findById(requestDto.getPacienteId())
-                    .orElseThrow(() -> new EntityNotFoundException("Paciente no encontrado"));
-            cita.setPaciente(paciente);
-        }
-
+        cita.setPaciente(paciente);
+        cita.setMedico(medico);
         cita.setFechaCita(requestDto.getFechaCita());
         cita.setHoraCita(requestDto.getHoraCita());
-        
+    }
 
-        if (cita.getEstadoCita() != EstadoCitaEnum.Asistió && cita.getEstadoCita() != EstadoCitaEnum.Cancelada) {
-            cita.setEstadoCita(EstadoCitaEnum.Reprogramada);
+    private void validarConflictos(Paciente paciente, Medico medico, LocalDate fecha, LocalTime hora, int idExcluido) {
+        EstadoCitaEnum cancelada = EstadoCitaEnum.Cancelada;
+        if (citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                paciente.getId(), medico.getEspecialidad().getId(), fecha, cancelada, idExcluido)) {
+            throw new IllegalArgumentException("El paciente ya cuenta con una cita programada para esta misma especialidad en la fecha seleccionada.");
         }
+        if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                medico.getId(), fecha, hora, cancelada, idExcluido)) {
+            throw new IllegalArgumentException("El médico ya tiene una cita asignada en ese horario exacto.");
+        }
+        if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                paciente.getId(), fecha, hora, cancelada, idExcluido)) {
+            throw new IllegalArgumentException("El paciente ya tiene una cita asignada en ese horario exacto.");
+        }
+    }
 
-        return mapearADto(citaMedicaRepository.save(cita));
+    private Paciente bloquearPaciente(Integer id) {
+        return pacienteRepository.buscarParaActualizar(id)
+                .orElseThrow(() -> new EntityNotFoundException("Paciente no encontrado"));
+    }
+
+    private Medico bloquearMedico(Integer id) {
+        return medicoRepository.buscarParaActualizar(id)
+                .orElseThrow(() -> new EntityNotFoundException("Médico no encontrado"));
     }
 
     @Override
     @Transactional
     public void cambiarEstadoCita(Integer id, EstadoCitaEnum nuevoEstado) {
-        CitaMedica cita = citaMedicaRepository.findById(id)
+        CitaMedica cita = citaMedicaRepository.buscarParaActualizar(id)
                 .orElseThrow(() -> new EntityNotFoundException("Cita médica no encontrada"));
+        if (cita.getEstadoCita() == EstadoCitaEnum.Cancelada && nuevoEstado != EstadoCitaEnum.Cancelada) {
+            Paciente paciente = bloquearPaciente(cita.getPaciente().getId());
+            Medico medico = bloquearMedico(cita.getMedico().getId());
+            validarDisponibilidadMedico(medico.getId(), cita.getFechaCita(), cita.getHoraCita());
+            validarConflictos(paciente, medico, cita.getFechaCita(), cita.getHoraCita(), id);
+        }
         cita.setEstadoCita(nuevoEstado);
         citaMedicaRepository.save(cita);
     }
@@ -201,17 +166,16 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
         
         dto.setFechaCita(cita.getFechaCita());
         dto.setHoraCita(cita.getHoraCita());
-        dto.setEstadoCita(cita.getEstadoCita().name().replace("_", " "));
+        dto.setEstadoCita(cita.getEstadoCita().valorApi());
         return dto;
     }
 
-    private void validarDisponibilidadMedico(CitaMedicaRequestDto requestDto) {
-        int diaCita = requestDto.getFechaCita().getDayOfWeek().getValue();
+    private void validarDisponibilidadMedico(Integer medicoId, LocalDate fecha, LocalTime hora) {
+        int diaCita = fecha.getDayOfWeek().getValue();
         boolean dentroDeHorario = horarioMedicoRepository
-                .findByMedicoIdAndDiaSemana(requestDto.getMedicoId(), diaCita)
+                .findByMedicoIdAndDiaSemana(medicoId, diaCita)
                 .stream()
-                .anyMatch(horario -> !requestDto.getHoraCita().isBefore(horario.getHoraInicio())
-                        && requestDto.getHoraCita().isBefore(horario.getHoraFin()));
+                .anyMatch(horario -> !hora.isBefore(horario.getHoraInicio()) && hora.isBefore(horario.getHoraFin()));
 
         if (!dentroDeHorario) {
             throw new IllegalArgumentException(
