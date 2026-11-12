@@ -50,13 +50,33 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
 
         validarDisponibilidadMedico(requestDto);
 
-        if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(
-                requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita())) {
+        // NUEVA VALIDACIÓN: Verificar que el paciente no tenga otra cita en la MISMA ESPECIALIDAD el mismo día
+        Integer especialidadNuevaId = medico.getEspecialidad().getId();
+        
+        boolean yaTieneCitaMismaEspecialidadEseDia = citaMedicaRepository.findAll().stream()
+                .anyMatch(c -> c.getPaciente().getId().equals(requestDto.getPacienteId()) &&
+                               c.getFechaCita().equals(requestDto.getFechaCita()) &&
+                               c.getMedico().getEspecialidad().getId().equals(especialidadNuevaId) &&
+                               c.getEstadoCita() != EstadoCitaEnum.Cancelada);
+
+        if (yaTieneCitaMismaEspecialidadEseDia) {
+            throw new IllegalArgumentException("El paciente ya cuenta con una cita programada para esta misma especialidad en la fecha seleccionada.");
+        }
+
+        // Validación alternativa con Stream: Verificar si el médico ya tiene una cita ACTIVA a esa misma hora
+        boolean medicoOcupado = citaMedicaRepository.findAll().stream()
+                .filter(c -> c.getMedico() != null && c.getFechaCita() != null && c.getHoraCita() != null)
+                .anyMatch(c -> c.getMedico().getId().equals(requestDto.getMedicoId()) &&
+                               c.getFechaCita().equals(requestDto.getFechaCita()) &&
+                               c.getHoraCita().equals(requestDto.getHoraCita()) &&
+                               c.getEstadoCita() != EstadoCitaEnum.Cancelada);
+
+        if (medicoOcupado) {
             throw new IllegalArgumentException("El médico ya tiene una cita asignada en ese horario exacto.");
         }
 
-        if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(
-                requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita())) {
+        if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
+                requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
             throw new IllegalArgumentException("El paciente ya tiene una cita asignada en ese horario exacto.");
         }
 
@@ -120,8 +140,8 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
         boolean cambioMedico = !cita.getMedico().getId().equals(requestDto.getMedicoId());
 
         if (cambioHorario || cambioMedico) {
-            if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(
-                    requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita())) {
+            if (citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
+                    requestDto.getMedicoId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
                 throw new IllegalArgumentException("El médico seleccionado ya tiene una cita en ese horario.");
             }
         }
@@ -129,8 +149,8 @@ public class CitaMedicaServiceImpl implements CitaMedicaService {
         boolean cambioPaciente = !cita.getPaciente().getId().equals(requestDto.getPacienteId());
 
         if (cambioHorario || cambioPaciente) {
-            if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(
-                    requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita())) {
+            if (citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNot(
+                    requestDto.getPacienteId(), requestDto.getFechaCita(), requestDto.getHoraCita(), EstadoCitaEnum.Cancelada)) {
                 throw new IllegalArgumentException("El paciente seleccionado ya tiene una cita en ese horario.");
             }
         }
