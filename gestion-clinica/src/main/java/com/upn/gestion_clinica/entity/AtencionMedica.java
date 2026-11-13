@@ -3,6 +3,8 @@ package com.upn.gestion_clinica.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
 
 import java.time.OffsetDateTime;
 
@@ -30,7 +32,8 @@ public class AtencionMedica {
     @JoinColumn(name = "codigo_cie10", nullable = false)
     private Cie10 cie10;
 
-    @Column(name = "fecha_atencion", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp(source = SourceType.DB)
+    @Column(name = "fecha_atencion", nullable = false, updatable = false)
     private OffsetDateTime fechaAtencion;
 
     @OneToMany(mappedBy = "atencionMedica", fetch = FetchType.LAZY)

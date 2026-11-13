@@ -64,7 +64,7 @@ public class AtencionMedicaServiceImpl implements AtencionMedicaService {
     public AtencionMedicaResponseDto registrarAtencion(AtencionMedicaRegistroDto requestDto, String correoMedicoLogueado) {
         Medico medicoLogueado = obtenerMedicoPorCorreo(correoMedicoLogueado);
 
-        CitaMedica cita = citaMedicaRepository.findById(requestDto.getCitaMedicaId())
+        CitaMedica cita = citaMedicaRepository.buscarParaActualizar(requestDto.getCitaMedicaId())
                 .orElseThrow(() -> new EntityNotFoundException("Cita médica no encontrada"));
 
 

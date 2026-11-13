@@ -4,6 +4,8 @@ import com.upn.gestion_clinica.dto.ErrorResponseDto;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -70,5 +72,14 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponseDto> buildResponse(String mensaje, HttpStatus status) {
         ErrorResponseDto error = new ErrorResponseDto(mensaje, status.value(), LocalDateTime.now());
         return ResponseEntity.status(status).body(error);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponseDto> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        String mensaje = "El horario seleccionado ya se encuentra ocupado.";
+        if (ex.getMessage() != null && ex.getMessage().contains("uq_medico_horario")) {
+            mensaje = "El médico ya tiene una cita asignada en ese horario exacto.";
+        }
+        return buildResponse(mensaje, HttpStatus.BAD_REQUEST);
     }
 }

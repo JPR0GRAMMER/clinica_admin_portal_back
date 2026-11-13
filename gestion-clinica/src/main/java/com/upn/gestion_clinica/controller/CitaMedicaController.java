@@ -57,7 +57,7 @@ public class CitaMedicaController {
     @PatchMapping("/{id}/estado")
     public ResponseEntity<Void> cambiarEstado(@PathVariable Integer id, @RequestParam String estado) {
 
-        EstadoCitaEnum nuevoEstado = EstadoCitaEnum.valueOf(estado.replace(" ", "_"));
+        EstadoCitaEnum nuevoEstado = EstadoCitaEnum.desdeApi(estado);
         citaMedicaService.cambiarEstadoCita(id, nuevoEstado);
         return ResponseEntity.noContent().build();
     }
