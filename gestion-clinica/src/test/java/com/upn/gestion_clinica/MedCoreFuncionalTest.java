@@ -3,6 +3,7 @@ package com.upn.gestion_clinica;
 import com.upn.gestion_clinica.entity.*;
 import com.upn.gestion_clinica.repository.*;
 import com.upn.gestion_clinica.security.JwtUtil;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -36,7 +38,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("tc12")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MedCoreFuncionalTest {
-    @Autowired ObjectMapper json;
+    @Autowired  ObjectMapper json;
+    @Autowired JdbcTemplate jdbc;
     @Autowired JwtUtil jwt;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RolRepository roles;
@@ -53,7 +56,7 @@ class MedCoreFuncionalTest {
 
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final LocalDate fecha = LocalDate.now().plusDays(7);
-    private int secuencia = 1000;
+    private int secuencia = (int) ((System.currentTimeMillis() / 100) % 80000000L) + 10000000;
     private Paciente paciente;
     private Medico medico;
     private Medico otroMedico;
@@ -77,6 +80,48 @@ class MedCoreFuncionalTest {
             diagnostico.setDescripcion("Diagnóstico de prueba");
             diagnosticos.save(diagnostico);
         }
+    }
+
+    @AfterAll
+    void limpiarDatosDePrueba() {
+        jdbc.update("""
+            DELETE FROM detalle_receta WHERE receta_medica_id IN (
+                SELECT r.id FROM receta_medica r
+                JOIN atencion_medica a ON r.atencion_medica_id = a.id
+                JOIN cita_medica c ON a.cita_medica_id = c.id
+                JOIN paciente p ON c.paciente_id = p.id
+                WHERE p.correo = 'paciente@example.test'
+            )
+        """);
+        jdbc.update("""
+            DELETE FROM receta_medica WHERE atencion_medica_id IN (
+                SELECT a.id FROM atencion_medica a
+                JOIN cita_medica c ON a.cita_medica_id = c.id
+                JOIN paciente p ON c.paciente_id = p.id
+                WHERE p.correo = 'paciente@example.test'
+            )
+        """);
+        jdbc.update("""
+            DELETE FROM atencion_medica WHERE cita_medica_id IN (
+                SELECT c.id FROM cita_medica c
+                JOIN paciente p ON c.paciente_id = p.id
+                WHERE p.correo = 'paciente@example.test'
+            )
+        """);
+        jdbc.update("""
+            DELETE FROM cita_medica
+            WHERE paciente_id IN (SELECT id FROM paciente WHERE correo = 'paciente@example.test')
+            OR medico_id IN (SELECT m.id FROM medico m JOIN usuario u ON m.usuario_id = u.id WHERE u.correo LIKE 'prueba-%@example.test')
+        """);
+        jdbc.update("""
+            DELETE FROM horario_medico
+            WHERE medico_id IN (SELECT m.id FROM medico m JOIN usuario u ON m.usuario_id = u.id WHERE u.correo LIKE 'prueba-%@example.test')
+        """);
+        jdbc.update("DELETE FROM medico WHERE usuario_id IN (SELECT id FROM usuario WHERE correo LIKE 'prueba-%@example.test')");
+        jdbc.update("DELETE FROM usuario WHERE correo LIKE 'prueba-%@example.test'");
+        jdbc.update("DELETE FROM paciente WHERE correo = 'paciente@example.test'");
+        jdbc.update("DELETE FROM especialidad WHERE nombre LIKE '%TC12%'");
+        jdbc.update("DELETE FROM medicamento WHERE codigo LIKE 'TC12-%'");
     }
 
     @Test void tc01_agenda_y_devuelve_confirmada() {
@@ -358,9 +403,17 @@ class MedCoreFuncionalTest {
     }
 
     private Usuario usuario(String nombreRol) {
-        Rol rol = new Rol();
-        rol.setNombre(nombreRol);
-        roles.save(rol);
+        Rol rol = roles.findAll().stream()
+                .filter(r -> nombreRol.equalsIgnoreCase(r.getNombre()))
+                .findFirst()
+                .orElseGet(() -> {
+                    Rol nuevoRol = new Rol();
+                    nuevoRol.setNombre(nombreRol);
+                    nuevoRol.setDescripcion("Rol " + nombreRol);
+                    nuevoRol.setEstado(1);
+                    return roles.save(nuevoRol);
+                });
+
         Usuario usuario = new Usuario();
         usuario.setRol(rol);
         usuario.setNombre("Usuario");
