@@ -62,6 +62,7 @@ public class CitaMedicaServiceImplTest {
         usuarioMedico.setApellido("Sanchez");
 
         Especialidad especialidad = new Especialidad();
+        especialidad.setId(1);
         especialidad.setNombre("Medicina General");
 
         medico = new Medico();
@@ -77,24 +78,21 @@ public class CitaMedicaServiceImplTest {
         horario.setHoraFin(LocalTime.of(14, 0));
     }
 
-    // --- TEST 1 (Camino feliz) ---
     @Test
     @DisplayName("1. Camino Feliz: Registrar cita con datos válidos y disponibilidad")
     void agendarCita_CaminoFeliz_DebeRegistrarExitosamente() {
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaValida);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, fechaValida, horaValida))
-                .thenReturn(false);
-        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(1, fechaValida, horaValida))
-                .thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                1, 1, fechaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                10, fechaValida, horaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                1, fechaValida, horaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
 
         when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> {
             CitaMedica c = invocation.getArgument(0);
@@ -112,25 +110,22 @@ public class CitaMedicaServiceImplTest {
         verify(citaMedicaRepository, times(1)).save(any(CitaMedica.class));
     }
 
-    // --- TEST 2 (Caso borde inferior) ---
     @Test
     @DisplayName("2. Caso Borde: Permitir agendar en el inicio exacto del turno (08:00)")
     void agendarCita_CasoBorde_HoraExactaInicioTurno_DebeRegistrar() {
         LocalTime horaAperturaExacta = LocalTime.of(8, 0);
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaAperturaExacta);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaAperturaExacta);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, fechaValida, horaAperturaExacta))
-                .thenReturn(false);
-        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(1, fechaValida, horaAperturaExacta))
-                .thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                1, 1, fechaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                10, fechaValida, horaAperturaExacta, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                1, fechaValida, horaAperturaExacta, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
 
         when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> {
             CitaMedica c = invocation.getArgument(0);
@@ -145,19 +140,14 @@ public class CitaMedicaServiceImplTest {
         verify(citaMedicaRepository, times(1)).save(any(CitaMedica.class));
     }
 
-    // --- TEST 3 (Caso borde superior) ---
     @Test
     @DisplayName("3. Caso Borde: Rechazar reserva en la hora exacta de fin del turno (14:00)")
     void agendarCita_CasoBorde_HoraExactaFinTurno_LanzaIllegalArgumentException() {
         LocalTime horaCierreExacta = LocalTime.of(14, 0);
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaCierreExacta);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaCierreExacta);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
 
@@ -165,94 +155,75 @@ public class CitaMedicaServiceImplTest {
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 4 (Excepción solapamiento médico) ---
     @Test
     @DisplayName("4. Excepción: Lanzar error si el médico ya tiene otra cita en ese horario")
     void agendarCita_Excepcion_MedicoConCitaOcupada_LanzaIllegalArgumentException() {
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaValida);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, fechaValida, horaValida))
-                .thenReturn(true);
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                1, 1, fechaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                10, fechaValida, horaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(true);
 
-        IllegalArgumentException excepcion = assertThrows(IllegalArgumentException.class, () -> {
-            citaMedicaService.agendarCita(request);
-        });
+        IllegalArgumentException excepcion = assertThrows(IllegalArgumentException.class,
+                () -> citaMedicaService.agendarCita(request));
 
         assertEquals("El médico ya tiene una cita asignada en ese horario exacto.", excepcion.getMessage());
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 5 (Excepción solapamiento paciente) ---
     @Test
     @DisplayName("5. Excepción: Lanzar error si el paciente ya tiene otra cita en ese horario")
     void agendarCita_Excepcion_PacienteConCitaOcupada_LanzaIllegalArgumentException() {
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaValida);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, fechaValida, horaValida))
-                .thenReturn(false);
-        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(1, fechaValida, horaValida))
-                .thenReturn(true);
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                1, 1, fechaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                10, fechaValida, horaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                1, fechaValida, horaValida, EstadoCitaEnum.Cancelada, 0)).thenReturn(true);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
-            citaMedicaService.agendarCita(request);
-        });
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> citaMedicaService.agendarCita(request));
 
         assertEquals("El paciente ya tiene una cita asignada en ese horario exacto.", ex.getMessage());
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 6 (Excepción fuera de horario) ---
     @Test
     @DisplayName("6. Excepción: Lanzar error si la hora de la cita está fuera del turno del médico")
     void agendarCita_Excepcion_FueraDeHorarioMedico_LanzaIllegalArgumentException() {
-        LocalTime horaFueraDeTurno = LocalTime.of(15, 0); // El turno acaba a las 14:00
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaFueraDeTurno);
+        LocalTime horaFueraDeTurno = LocalTime.of(15, 0);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaFueraDeTurno);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of(horario));
 
-        IllegalArgumentException excepcion = assertThrows(IllegalArgumentException.class, () -> {
-            citaMedicaService.agendarCita(request);
-        });
+        IllegalArgumentException excepcion = assertThrows(IllegalArgumentException.class,
+                () -> citaMedicaService.agendarCita(request));
 
         assertTrue(excepcion.getMessage().contains("La cita debe programarse dentro de un horario disponible"));
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 7 (Excepción sin horarios ese día) ---
     @Test
     @DisplayName("7. Excepción: Lanzar error si el médico no tiene turnos configurados para el día")
     void agendarCita_Excepcion_MedicoSinHorarioElDia_LanzaIllegalArgumentException() {
-        CitaMedicaRequestDto request = new CitaMedicaRequestDto();
-        request.setPacienteId(1);
-        request.setMedicoId(10);
-        request.setFechaCita(fechaValida);
-        request.setHoraCita(horaValida);
+        CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt()))
                 .thenReturn(List.of());
 
@@ -260,7 +231,6 @@ public class CitaMedicaServiceImplTest {
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 8 (Excepción paciente no existe) ---
     @Test
     @DisplayName("8. Excepción: Lanzar error si el paciente no existe en el sistema")
     void agendarCita_Excepcion_PacienteNoExiste_LanzaEntityNotFoundException() {
@@ -268,13 +238,12 @@ public class CitaMedicaServiceImplTest {
         request.setPacienteId(999);
         request.setMedicoId(10);
 
-        when(pacienteRepository.findById(999)).thenReturn(Optional.empty());
+        when(pacienteRepository.buscarParaActualizar(999)).thenReturn(Optional.empty());
 
         assertThrows(EntityNotFoundException.class, () -> citaMedicaService.agendarCita(request));
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
     }
 
-    // --- TEST 9 (Excepción médico no existe) ---
     @Test
     @DisplayName("9. Excepción: Lanzar error si el médico no existe en el sistema")
     void agendarCita_Excepcion_MedicoNoExiste_LanzaEntityNotFoundException() {
@@ -282,8 +251,8 @@ public class CitaMedicaServiceImplTest {
         request.setPacienteId(1);
         request.setMedicoId(999);
 
-        when(pacienteRepository.findById(1)).thenReturn(Optional.of(paciente));
-        when(medicoRepository.findById(999)).thenReturn(Optional.empty());
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(999)).thenReturn(Optional.empty());
 
         assertThrows(EntityNotFoundException.class, () -> citaMedicaService.agendarCita(request));
         verify(citaMedicaRepository, never()).save(any(CitaMedica.class));
@@ -395,14 +364,16 @@ public class CitaMedicaServiceImplTest {
         nuevoPaciente.setDocumentoIdentidad("71234567");
         CitaMedicaRequestDto request = request(2, 11, fechaValida.plusDays(2), LocalTime.of(12, 0));
 
-        when(citaMedicaRepository.findById(400)).thenReturn(Optional.of(cita));
+        when(citaMedicaRepository.buscarParaActualizar(400)).thenReturn(Optional.of(cita));
+        when(pacienteRepository.buscarParaActualizar(2)).thenReturn(Optional.of(nuevoPaciente));
+        when(medicoRepository.buscarParaActualizar(11)).thenReturn(Optional.of(nuevoMedico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(11), anyInt())).thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(11, request.getFechaCita(), request.getHoraCita()))
-                .thenReturn(false);
-        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCita(2, request.getFechaCita(), request.getHoraCita()))
-                .thenReturn(false);
-        when(medicoRepository.findById(11)).thenReturn(Optional.of(nuevoMedico));
-        when(pacienteRepository.findById(2)).thenReturn(Optional.of(nuevoPaciente));
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                2, 1, request.getFechaCita(), EstadoCitaEnum.Cancelada, 400)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                11, request.getFechaCita(), request.getHoraCita(), EstadoCitaEnum.Cancelada, 400)).thenReturn(false);
+        when(citaMedicaRepository.existsByPacienteIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                2, request.getFechaCita(), request.getHoraCita(), EstadoCitaEnum.Cancelada, 400)).thenReturn(false);
         when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CitaMedicaResponseDto response = citaMedicaService.reprogramarCita(400, request);
@@ -419,37 +390,44 @@ public class CitaMedicaServiceImplTest {
     void reprogramarCita_RechazaConflictoDeDisponibilidad() {
         CitaMedica cita = cita(401, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
         CitaMedicaRequestDto request = request(1, 10, fechaValida.plusDays(1), horaValida);
-        when(citaMedicaRepository.findById(401)).thenReturn(Optional.of(cita));
+
+        when(citaMedicaRepository.buscarParaActualizar(401)).thenReturn(Optional.of(cita));
+        when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt())).thenReturn(List.of(horario));
-        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCita(10, request.getFechaCita(), request.getHoraCita()))
-                .thenReturn(true);
+        when(citaMedicaRepository.existsByPacienteIdAndMedicoEspecialidadIdAndFechaCitaAndEstadoCitaNotAndIdNot(
+                1, 1, request.getFechaCita(), EstadoCitaEnum.Cancelada, 401)).thenReturn(false);
+        when(citaMedicaRepository.existsByMedicoIdAndFechaCitaAndHoraCitaAndEstadoCitaNotAndIdNot(
+                10, request.getFechaCita(), request.getHoraCita(), EstadoCitaEnum.Cancelada, 401)).thenReturn(true);
 
         assertThrows(IllegalArgumentException.class, () -> citaMedicaService.reprogramarCita(401, request));
         verify(citaMedicaRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("CitaMedicaServiceImpl.reprogramarCita() - preserva estados Asistió y Cancelada")
-    void reprogramarCita_PreservaEstadosFinales() {
+    @DisplayName("CitaMedicaServiceImpl.reprogramarCita() - rechaza estados finales Asistió y Cancelada")
+    void reprogramarCita_RechazaEstadosFinales() {
         CitaMedicaRequestDto request = request(1, 10, fechaValida, horaValida);
-        when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt())).thenReturn(List.of(horario));
-        when(citaMedicaRepository.save(any(CitaMedica.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         for (EstadoCitaEnum estado : List.of(EstadoCitaEnum.Asistió, EstadoCitaEnum.Cancelada)) {
             CitaMedica cita = cita(410, fechaValida, horaValida, estado);
-            when(citaMedicaRepository.findById(410)).thenReturn(Optional.of(cita));
+            when(citaMedicaRepository.buscarParaActualizar(410)).thenReturn(Optional.of(cita));
 
-            CitaMedicaResponseDto response = citaMedicaService.reprogramarCita(410, request);
-
-            assertEquals(estado.name().replace("_", " "), response.getEstadoCita());
+            assertThrows(IllegalArgumentException.class,
+                    () -> citaMedicaService.reprogramarCita(410, request));
         }
+
+        verify(citaMedicaRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("CitaMedicaServiceImpl.cambiarEstadoCita() - guarda cada estado del enum")
     void cambiarEstadoCita_GuardaCadaEstado() {
         CitaMedica cita = cita(500, fechaValida, horaValida, EstadoCitaEnum.Confirmada);
-        when(citaMedicaRepository.findById(500)).thenReturn(Optional.of(cita));
+        when(citaMedicaRepository.buscarParaActualizar(500)).thenReturn(Optional.of(cita));
+        lenient().when(pacienteRepository.buscarParaActualizar(1)).thenReturn(Optional.of(paciente));
+        lenient().when(medicoRepository.buscarParaActualizar(10)).thenReturn(Optional.of(medico));
+        lenient().when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(eq(10), anyInt())).thenReturn(List.of(horario));
 
         for (EstadoCitaEnum estado : EstadoCitaEnum.values()) {
             citaMedicaService.cambiarEstadoCita(500, estado);
@@ -462,7 +440,7 @@ public class CitaMedicaServiceImplTest {
     @Test
     @DisplayName("CitaMedicaServiceImpl.cambiarEstadoCita() - cita inexistente")
     void cambiarEstadoCita_RechazaCitaInexistente() {
-        when(citaMedicaRepository.findById(999)).thenReturn(Optional.empty());
+        when(citaMedicaRepository.buscarParaActualizar(999)).thenReturn(Optional.empty());
 
         assertThrows(EntityNotFoundException.class,
                 () -> citaMedicaService.cambiarEstadoCita(999, EstadoCitaEnum.Cancelada));

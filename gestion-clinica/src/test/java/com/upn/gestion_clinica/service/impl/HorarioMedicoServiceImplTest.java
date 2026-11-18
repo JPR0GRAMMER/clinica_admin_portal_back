@@ -3,11 +3,10 @@ package com.upn.gestion_clinica.service.impl;
 import com.upn.gestion_clinica.dto.horario_medico.HorarioMedicoRequestDto;
 import com.upn.gestion_clinica.dto.horario_medico.HorarioMedicoResponseDto;
 import com.upn.gestion_clinica.entity.CitaMedica;
-import com.upn.gestion_clinica.entity.EstadoCitaEnum;
 import com.upn.gestion_clinica.entity.Especialidad;
+import com.upn.gestion_clinica.entity.EstadoCitaEnum;
 import com.upn.gestion_clinica.entity.HorarioMedico;
 import com.upn.gestion_clinica.entity.Medico;
-import com.upn.gestion_clinica.entity.Paciente;
 import com.upn.gestion_clinica.entity.Usuario;
 import com.upn.gestion_clinica.repository.CitaMedicaRepository;
 import com.upn.gestion_clinica.repository.HorarioMedicoRepository;
@@ -26,9 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,8 +50,8 @@ class HorarioMedicoServiceImplTest {
     void crear_CreaHorarioValido() {
         HorarioMedicoRequestDto request = request(10, 3, "08:00", "14:00");
         HorarioMedico horarioGuardado = horario(50, medico, 3, "08:00", "14:00");
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3)).thenReturn(List.of());
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.save(any(HorarioMedico.class))).thenReturn(horarioGuardado);
 
         HorarioMedicoResponseDto response = horarioService.crear(request);
@@ -82,17 +79,19 @@ class HorarioMedicoServiceImplTest {
     @DisplayName("HorarioMedicoServiceImpl.crear() - rechaza solapamiento parcial")
     void crear_RechazaSolapamientoParcial() {
         HorarioMedicoRequestDto request = request(10, 3, "13:00", "16:00");
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3))
                 .thenReturn(List.of(horario(1, medico, 3, "08:00", "14:00")));
 
         assertThrows(IllegalArgumentException.class, () -> horarioService.crear(request));
-        verify(medicoRepository, never()).findById(anyInt());
+        verify(horarioMedicoRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("HorarioMedicoServiceImpl.crear() - rechaza solapamiento total")
     void crear_RechazaSolapamientoTotal() {
         HorarioMedicoRequestDto request = request(10, 3, "09:00", "12:00");
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3))
                 .thenReturn(List.of(horario(1, medico, 3, "08:00", "14:00")));
 
@@ -104,9 +103,9 @@ class HorarioMedicoServiceImplTest {
     @DisplayName("HorarioMedicoServiceImpl.crear() - permite límites contiguos")
     void crear_PermiteLimitesContiguos() {
         HorarioMedicoRequestDto request = request(10, 3, "14:00", "16:00");
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3))
                 .thenReturn(List.of(horario(1, medico, 3, "08:00", "14:00")));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
         when(horarioMedicoRepository.save(any(HorarioMedico.class))).thenAnswer(invocation -> {
             HorarioMedico horario = invocation.getArgument(0);
             horario.setId(2);
@@ -123,8 +122,8 @@ class HorarioMedicoServiceImplTest {
     @DisplayName("HorarioMedicoServiceImpl.crear() - médico inexistente")
     void crear_RechazaMedicoInexistente() {
         HorarioMedicoRequestDto request = request(999, 3, "08:00", "14:00");
-        when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(999, 3)).thenReturn(List.of());
-        when(medicoRepository.findById(999)).thenReturn(Optional.empty());
+        lenient().when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(999, 3)).thenReturn(List.of());
+        mockMedico(999, Optional.empty());
 
         assertThrows(EntityNotFoundException.class, () -> horarioService.crear(request));
         verify(horarioMedicoRepository, never()).save(any());
@@ -137,10 +136,9 @@ class HorarioMedicoServiceImplTest {
         HorarioMedicoRequestDto request = request(10, 3, "09:00", "13:00");
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(actual));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3)).thenReturn(List.of(actual));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoId(10)).thenReturn(List.of(actual));
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(10), any(LocalDate.class)))
-                .thenReturn(List.of());
+        mockCitasFuturas(10, List.of());
         when(horarioMedicoRepository.save(any(HorarioMedico.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         HorarioMedicoResponseDto response = horarioService.actualizar(5, request);
@@ -157,6 +155,7 @@ class HorarioMedicoServiceImplTest {
         HorarioMedico actual = horario(5, medico, 3, "08:00", "12:00");
         HorarioMedico otro = horario(6, medico, 3, "14:00", "18:00");
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(actual));
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3)).thenReturn(List.of(actual, otro));
 
         assertThrows(IllegalArgumentException.class,
@@ -167,15 +166,15 @@ class HorarioMedicoServiceImplTest {
     @Test
     @DisplayName("HorarioMedicoServiceImpl.actualizar() - impide dejar citas futuras sin cobertura")
     void actualizar_RechazaCitasFuturasSinCobertura() {
+        LocalDate fechaCita = proximaFechaConDiaSemana(3);
         HorarioMedico actual = horario(5, medico, 3, "08:00", "12:00");
-        HorarioMedicoRequestDto request = request(10, 3, 3, "08:00", "09:00");
-        CitaMedica citaFutura = citaFutura(medico, LocalDate.now().plusDays(1), LocalTime.of(10, 0));
+        HorarioMedicoRequestDto request = request(10, 3, "08:00", "09:00");
+        CitaMedica citaFutura = citaFutura(medico, fechaCita, LocalTime.of(10, 0));
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(actual));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(10, 3)).thenReturn(List.of(actual));
-        when(medicoRepository.findById(10)).thenReturn(Optional.of(medico));
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoId(10)).thenReturn(List.of(actual));
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(10), any(LocalDate.class)))
-                .thenReturn(List.of(citaFutura));
+        mockCitasFuturas(10, List.of(citaFutura));
 
         assertThrows(IllegalArgumentException.class, () -> horarioService.actualizar(5, request));
         verify(horarioMedicoRepository, never()).save(any());
@@ -189,13 +188,12 @@ class HorarioMedicoServiceImplTest {
         HorarioMedicoRequestDto request = request(11, 3, "09:00", "13:00");
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(actual));
         when(horarioMedicoRepository.findByMedicoIdAndDiaSemana(11, 3)).thenReturn(List.of());
-        when(medicoRepository.findById(11)).thenReturn(Optional.of(nuevoMedico));
+        mockMedico(10, Optional.of(medico));
+        mockMedico(11, Optional.of(nuevoMedico));
         when(horarioMedicoRepository.findByMedicoId(10)).thenReturn(List.of(actual));
         when(horarioMedicoRepository.findByMedicoId(11)).thenReturn(List.of());
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(10), any(LocalDate.class)))
-                .thenReturn(List.of());
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(11), any(LocalDate.class)))
-                .thenReturn(List.of());
+        mockCitasFuturas(10, List.of());
+        mockCitasFuturas(11, List.of());
         when(horarioMedicoRepository.save(any(HorarioMedico.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         HorarioMedicoResponseDto response = horarioService.actualizar(5, request);
@@ -213,9 +211,9 @@ class HorarioMedicoServiceImplTest {
         HorarioMedico cobertura = horario(6, medico, diaCita, "12:00", "16:00");
         CitaMedica citaFutura = citaFutura(medico, fechaCita, LocalTime.of(13, 0));
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(aEliminar));
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoId(10)).thenReturn(List.of(aEliminar, cobertura));
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(10), any(LocalDate.class)))
-                .thenReturn(List.of(citaFutura));
+        mockCitasFuturas(10, List.of(citaFutura));
 
         horarioService.eliminar(5);
 
@@ -225,12 +223,13 @@ class HorarioMedicoServiceImplTest {
     @Test
     @DisplayName("HorarioMedicoServiceImpl.eliminar() - rechaza citas futuras fuera de disponibilidad")
     void eliminar_RechazaCitasFuturasSinCobertura() {
+        LocalDate fechaCita = proximaFechaConDiaSemana(3);
         HorarioMedico aEliminar = horario(5, medico, 3, "08:00", "12:00");
-        CitaMedica citaFutura = citaFutura(medico, LocalDate.now().plusDays(1), LocalTime.of(10, 0));
+        CitaMedica citaFutura = citaFutura(medico, fechaCita, LocalTime.of(10, 0));
         when(horarioMedicoRepository.findById(5)).thenReturn(Optional.of(aEliminar));
+        mockMedico(10, Optional.of(medico));
         when(horarioMedicoRepository.findByMedicoId(10)).thenReturn(List.of(aEliminar));
-        when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(10), any(LocalDate.class)))
-                .thenReturn(List.of(citaFutura));
+        mockCitasFuturas(10, List.of(citaFutura));
 
         assertThrows(IllegalArgumentException.class, () -> horarioService.eliminar(5));
         verify(horarioMedicoRepository, never()).deleteById(anyInt());
@@ -245,11 +244,27 @@ class HorarioMedicoServiceImplTest {
         verify(horarioMedicoRepository, never()).deleteById(anyInt());
     }
 
-    private HorarioMedicoRequestDto request(Integer medicoId, Integer dia, String inicio, String fin) {
-        return request(medicoId, dia, dia, inicio, fin);
+    private void mockMedico(Integer medicoId, Optional<Medico> resultado) {
+        lenient().when(medicoRepository.findById(medicoId)).thenReturn(resultado);
+        lenient().when(medicoRepository.buscarParaActualizar(medicoId)).thenReturn(resultado);
     }
 
-    private HorarioMedicoRequestDto request(Integer medicoId, Integer dia, Integer ignoredDia, String inicio, String fin) {
+    private void mockCitasFuturas(Integer medicoId, List<CitaMedica> citas) {
+        lenient().when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqual(eq(medicoId), any(LocalDate.class)))
+                .thenReturn(citas);
+        lenient().when(citaMedicaRepository.findByMedicoIdAndFechaCitaGreaterThanEqualAndEstadoCitaIn(
+                eq(medicoId), any(LocalDate.class), anyList())).thenReturn(citas);
+    }
+
+    private LocalDate proximaFechaConDiaSemana(int diaSemanaDeseado) {
+        LocalDate fecha = LocalDate.now().plusDays(1);
+        while (fecha.getDayOfWeek().getValue() != diaSemanaDeseado) {
+            fecha = fecha.plusDays(1);
+        }
+        return fecha;
+    }
+
+    private HorarioMedicoRequestDto request(Integer medicoId, Integer dia, String inicio, String fin) {
         HorarioMedicoRequestDto request = new HorarioMedicoRequestDto();
         request.setMedicoId(medicoId);
         request.setDiaSemana(dia);

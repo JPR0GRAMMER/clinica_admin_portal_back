@@ -3,16 +3,15 @@ package com.upn.gestion_clinica.service.impl;
 import com.upn.gestion_clinica.dto.ProcedimientoMedicoDto;
 import com.upn.gestion_clinica.dto.atencion.AtencionMedicaRegistroDto;
 import com.upn.gestion_clinica.dto.atencion.AtencionMedicaResponseDto;
-import com.upn.gestion_clinica.dto.atencion.HistorialClinicoResponseDto;
 import com.upn.gestion_clinica.dto.receta.DetalleRecetaDto;
 import com.upn.gestion_clinica.dto.receta.RecetaMedicaDto;
 import com.upn.gestion_clinica.entity.AtencionMedica;
 import com.upn.gestion_clinica.entity.Cie10;
 import com.upn.gestion_clinica.entity.CitaMedica;
-import com.upn.gestion_clinica.entity.EstadoCitaEnum;
 import com.upn.gestion_clinica.entity.Especialidad;
-import com.upn.gestion_clinica.entity.Medico;
+import com.upn.gestion_clinica.entity.EstadoCitaEnum;
 import com.upn.gestion_clinica.entity.Medicamento;
+import com.upn.gestion_clinica.entity.Medico;
 import com.upn.gestion_clinica.entity.Paciente;
 import com.upn.gestion_clinica.entity.Usuario;
 import com.upn.gestion_clinica.repository.AtencionMedicaRepository;
@@ -102,7 +101,7 @@ class AtencionMedicaServiceImplTest {
         AtencionMedicaRegistroDto request = request(100, "Consulta", "Diagnóstico", "J06.9");
         when(usuarioRepository.findByCorreo("medico@clinica.com")).thenReturn(Optional.of(medicoLogueado.getUsuario()));
         when(medicoRepository.findByUsuarioId(10)).thenReturn(Optional.of(medicoLogueado));
-        when(citaMedicaRepository.findById(100)).thenReturn(Optional.of(cita));
+        when(citaMedicaRepository.buscarParaActualizar(100)).thenReturn(Optional.of(cita));
 
         assertThrows(IllegalArgumentException.class,
                 () -> atencionService.registrarAtencion(request, "medico@clinica.com"));
@@ -119,7 +118,7 @@ class AtencionMedicaServiceImplTest {
 
         for (EstadoCitaEnum estado : List.of(EstadoCitaEnum.Cancelada, EstadoCitaEnum.No_Asistió)) {
             CitaMedica cita = cita(100, medico, estado);
-            when(citaMedicaRepository.findById(100)).thenReturn(Optional.of(cita));
+            when(citaMedicaRepository.buscarParaActualizar(100)).thenReturn(Optional.of(cita));
 
             assertThrows(IllegalArgumentException.class,
                     () -> atencionService.registrarAtencion(request, "medico@clinica.com"));
@@ -278,7 +277,7 @@ class AtencionMedicaServiceImplTest {
     private void prepararMedicoYCita(Medico medico, CitaMedica cita) {
         when(usuarioRepository.findByCorreo("medico@clinica.com")).thenReturn(Optional.of(medico.getUsuario()));
         when(medicoRepository.findByUsuarioId(medico.getId())).thenReturn(Optional.of(medico));
-        when(citaMedicaRepository.findById(cita.getId())).thenReturn(Optional.of(cita));
+        when(citaMedicaRepository.buscarParaActualizar(cita.getId())).thenReturn(Optional.of(cita));
     }
 
     private AtencionMedicaRegistroDto request(Integer citaId, String motivo, String diagnostico, String codigo) {
